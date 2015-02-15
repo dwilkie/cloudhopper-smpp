@@ -9,19 +9,26 @@
   <description>Efficient, scalable, and flexible Java implementation of the Short Messaging Peer to Peer Protocol (SMPP)</description>
   <url>https://github.com/twitter/cloudhopper-smpp</url>
   <inceptionYear>2009</inceptionYear>
-    
+
   <scm>
     <url>https://github.com/twitter/cloudhopper-smpp</url>
     <connection>scm:git:https://github.com/twitter/cloudhopper-smpp.git</connection>
     <developerConnection>scm:git:git@github.com:twitter/cloudhopper-smpp.git</developerConnection>
     <tag>master</tag>
   </scm>
-  
+
   <parent>
     <groupId>com.cloudhopper</groupId>
     <artifactId>ch-maven-parent-oss</artifactId>
     <version>1.5</version>
   </parent>
+
+  <repositories>
+    <repository>
+      <id>clojars.org</id>
+      <url>http://clojars.org/repo</url>
+    </repository>
+  </repositories>
 
   <dependencies>
     <!-- compile scope -->
@@ -29,6 +36,11 @@
       <groupId>com.cloudhopper</groupId>
       <artifactId>ch-commons-util</artifactId>
       <version>${ch-commons-util.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>lein-dotenv</groupId>
+      <artifactId>lein-dotenv</artifactId>
+      <version>1.0.0</version>
     </dependency>
     <dependency>
       <groupId>com.cloudhopper</groupId>
@@ -39,6 +51,11 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <version>${slf4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>1.7.10</version>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
@@ -52,7 +69,6 @@
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>${junit.version}</version>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.cloudhopper</groupId>
@@ -82,5 +98,31 @@
     <netty.version>3.9.6.Final</netty.version>
   </properties>
 
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifest>
+              <addClasspath>true</addClasspath>
+              <mainClass>com.cloudhopper.smpp.demo.persist.Main</mainClass>
+            </manifest>
+          </archive>
+          <descriptorRefs>
+            <descriptorRef>jar-with-dependencies</descriptorRef>
+          </descriptorRefs>
+        </configuration>
+        <executions>
+          <execution>
+            <id>make-assembly</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
-
