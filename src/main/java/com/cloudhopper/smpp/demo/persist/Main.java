@@ -9,9 +9,9 @@ package com.cloudhopper.smpp.demo.persist;
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *      http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -36,10 +36,66 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.io.FileInputStream;
 import java.util.Properties;
 
-public class Main {
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.ParseException;
 
+public class Main {
   public static void main(String[] args) throws IOException, RecoverablePduException, InterruptedException,
       SmppChannelException, UnrecoverablePduException, SmppTimeoutException {
+
+    // create the command line parser
+    CommandLineParser parser = new BasicParser();
+
+    // create Options object
+    Options options = new Options();
+
+    Option configOption = OptionBuilder.withLongOpt("config")
+                                .withDescription("smpp configuration file")
+                                .hasArg()
+                                .withArgName("FILE")
+                                .isRequired()
+                                .create('c');
+
+    options.addOption(configOption);
+
+    String header = "Starts the client with the given configuration file\n\n";
+    String footer = "";
+
+    HelpFormatter formatter = new HelpFormatter();
+
+    String smppConfigurationFile = "";
+
+    try {
+      CommandLine line = parser.parse(options, args);
+      smppConfigurationFile = line.getOptionValue("c");
+    }
+
+    catch(ParseException exp) {
+      formatter.printHelp("chibi-smpp-client", header, options, footer, true);
+      System.exit(1);
+    }
+
+    // set up new properties object
+    // from the config file
+    try {
+      FileInputStream propFile = new FileInputStream(smppConfigurationFile);
+      Properties p = new Properties(System.getProperties());
+      p.load(propFile);
+
+      // set the system properties
+      System.setProperties(p);
+
+    } catch (IOException e) {
+      System.err.println(e.toString());
+      System.exit(1);
+    }
+
     DummySmppClientMessageService smppClientMessageService = new DummySmppClientMessageService();
     int i = 0;
     final LoadBalancedList<OutboundClient> balancedList = LoadBalancedLists.synchronizedList(new RoundRobinLoadBalancedList<OutboundClient>());
@@ -113,23 +169,6 @@ public class Main {
   }
 
   private static SmppSessionConfiguration getSmppSessionConfiguration(int i) {
-    // set up new properties object
-    // from file ".env"
-    try {
-      FileInputStream propFile =
-          new FileInputStream(".env");
-      Properties p =
-          new Properties(System.getProperties());
-      p.load(propFile);
-
-      // set the system properties
-      System.setProperties(p);
-      // display new properties
-
-    } catch (IOException e) {
-      System.err.println(e.toString());
-    }
-
     SmppSessionConfiguration config = new SmppSessionConfiguration();
     config.setWindowSize(Integer.parseInt(System.getProperty("SMPP_WINDOW_SIZE", "5")));
     config.setName("Tester.Session." + i);
