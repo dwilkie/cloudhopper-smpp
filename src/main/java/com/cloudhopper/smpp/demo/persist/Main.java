@@ -9,9 +9,9 @@ package com.cloudhopper.smpp.demo.persist;
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -73,16 +73,16 @@ public class Main {
 									byte[] textBytes = CharsetUtil.encode(text160, CharsetUtil.CHARSET_GSM);
 
 									SubmitSm submit = new SubmitSm();
-									int sourceTon = Integer.parseInt(System.getProperty("SMART_SMPP_SOURCE_TON", "3"));
-									int sourceNpi = Integer.parseInt(System.getProperty("SMART_SMPP_SOURCE_NPI", "0"));
-									String sourceAddress = System.getProperty("SMART_SMPP_SOURCE_ADDRESS", "40404");
+									int sourceTon = Integer.parseInt(System.getProperty("SMPP_SOURCE_TON", "3"));
+									int sourceNpi = Integer.parseInt(System.getProperty("SMPP_SOURCE_NPI", "0"));
+									String sourceAddress = System.getProperty("SMPP_SOURCE_ADDRESS", "40404");
 									submit.setSourceAddress(new Address((byte) sourceTon, (byte) sourceNpi, sourceAddress));
-									int destTon = Integer.parseInt(System.getProperty("SMART_SMPP_DESTINATION_TON", "1"));
-									int destNpi = Integer.parseInt(System.getProperty("SMART_SMPP_DESTINATION_NPI", "1"));
-									String destAddress = System.getProperty("SMART_SMPP_TEST_MT_NUMBER", "44555519205");
+									int destTon = Integer.parseInt(System.getProperty("SMPP_DESTINATION_TON", "1"));
+									int destNpi = Integer.parseInt(System.getProperty("SMPP_DESTINATION_NPI", "1"));
+									String destAddress = System.getProperty("SMPP_TEST_MT_NUMBER", "44555519205");
 									submit.setDestAddress(new Address((byte) destTon, (byte) destNpi, destAddress));
 									submit.setRegisteredDelivery(SmppConstants.REGISTERED_DELIVERY_SMSC_RECEIPT_REQUESTED);
-									submit.setServiceType(System.getProperty("SMART_SMPP_SERVICE_TYPE", "vma"));
+									submit.setServiceType(System.getProperty("SMPP_SERVICE_TYPE", "vma"));
 									submit.setShortMessage(textBytes);
 									final SubmitSmResp submit1 = session.submit(submit, 10000);
 									Assert.assertNotNull(submit1);
@@ -131,19 +131,19 @@ public class Main {
     }
 
 		SmppSessionConfiguration config = new SmppSessionConfiguration();
-		config.setWindowSize(Integer.parseInt(System.getProperty("SMART_SMPP_WINDOW_SIZE", "5")));
+		config.setWindowSize(Integer.parseInt(System.getProperty("SMPP_WINDOW_SIZE", "5")));
 		config.setName("Tester.Session." + i);
 		config.setType(SmppBindType.TRANSCEIVER);
-		config.setHost(System.getProperty("SMART_SMPP_HOST", "127.0.0.1"));
-		config.setPort(Integer.parseInt(System.getProperty("SMART_SMPP_PORT", "2776")));
-		config.setConnectTimeout(Integer.parseInt(System.getProperty("SMART_SMPP_CONNECTION_TIMEOUT", "10000")));
-		config.setSystemId(System.getProperty("SMART_SMPP_SYSTEM_ID", "systemId" + i));
-		config.setPassword(System.getProperty("SMART_SMPP_PASSWORD", "password"));
+		config.setHost(System.getProperty("SMPP_HOST", "127.0.0.1"));
+		config.setPort(Integer.parseInt(System.getProperty("SMPP_PORT", "2776")));
+		config.setConnectTimeout(Integer.parseInt(System.getProperty("SMPP_CONNECTION_TIMEOUT", "10000")));
+		config.setSystemId(System.getProperty("SMPP_SYSTEM_ID", "systemId" + i));
+		config.setPassword(System.getProperty("SMPP_PASSWORD", "password"));
 		config.getLoggingOptions().setLogBytes(false);
 		// to enable monitoring (request expiration)
 
-		config.setRequestExpiryTimeout(Integer.parseInt(System.getProperty("SMART_SMPP_REQUEST_EXPIRY_TIMEOUT", "30000")));
-		config.setWindowMonitorInterval(Integer.parseInt(System.getProperty("SMART_SMPP_WINDOW_MONITOR_INTERVAL", "15000")));
+		config.setRequestExpiryTimeout(Integer.parseInt(System.getProperty("SMPP_REQUEST_EXPIRY_TIMEOUT", "30000")));
+		config.setWindowMonitorInterval(Integer.parseInt(System.getProperty("SMPP_WINDOW_MONITOR_INTERVAL", "15000")));
 
 		config.setCountersEnabled(false);
 
