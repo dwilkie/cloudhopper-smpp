@@ -23,13 +23,6 @@
     <version>1.5</version>
   </parent>
 
-  <repositories>
-    <repository>
-      <id>clojars.org</id>
-      <url>http://clojars.org/repo</url>
-    </repository>
-  </repositories>
-
   <dependencies>
     <!-- compile scope -->
     <dependency>
