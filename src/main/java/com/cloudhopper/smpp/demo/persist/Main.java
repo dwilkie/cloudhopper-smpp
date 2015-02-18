@@ -147,7 +147,7 @@ public class Main {
 
                     ByteOrder destByteOrder;
 
-                    if(System.getProperty("SMPP_MT_LITTLE_ENDIANNESS", "1") == "1") {
+                    if(Integer.parseInt(System.getProperty("SMPP_MT_UCS2_LITTLE_ENDIANNESS", "1")) == 1) {
                       destByteOrder = ByteOrder.LITTLE_ENDIAN;
                     } else {
                       destByteOrder = ByteOrder.BIG_ENDIAN;
