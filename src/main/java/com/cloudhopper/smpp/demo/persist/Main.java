@@ -9,9 +9,9 @@ package com.cloudhopper.smpp.demo.persist;
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,6 +21,9 @@ package com.cloudhopper.smpp.demo.persist;
  */
 
 import com.cloudhopper.commons.charset.CharsetUtil;
+import com.cloudhopper.commons.charset.GSMCharset;
+import com.cloudhopper.commons.charset.Charset;
+
 import com.cloudhopper.commons.util.*;
 import com.cloudhopper.smpp.*;
 import com.cloudhopper.smpp.pdu.SubmitSm;
@@ -35,6 +38,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.io.FileInputStream;
 import java.util.Properties;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -125,8 +131,38 @@ public class Main {
                 final OutboundClient next = balancedList.getNext();
                 final SmppSession session = next.getSession();
                 if (session != null && session.isBound()) {
-                  String text160 = "\u20AC Lorem [ipsum] dolor sit amet, consectetur adipiscing elit. Proin feugiat, leo id commodo tincidunt, nibh diam ornare est, vitae accumsan risus lacus sed sem metus.";
-                  byte[] textBytes = CharsetUtil.encode(text160, CharsetUtil.CHARSET_GSM);
+                  String defaultText = "\u20AC Lorem [ipsum] dolor sit amet, consectetur adipiscing elit. Proin feugiat, leo id commodo tincidunt, nibh diam ornare est, vitae accumsan risus lacus sed sem metus.";
+
+                  String text160 = System.getProperty("SMPP_TEST_MT_MESSAGE_TEXT", defaultText);
+
+                  byte[] textBytes;
+                  byte dataCoding;
+
+                  if (GSMCharset.canRepresent(text160)) {
+                    textBytes = CharsetUtil.encode(text160, CharsetUtil.CHARSET_GSM);
+                    dataCoding = SmppConstants.DATA_CODING_GSM;
+                  } else {
+                    textBytes = CharsetUtil.encode(text160, CharsetUtil.CHARSET_UCS_2);
+                    dataCoding = SmppConstants.DATA_CODING_UCS2;
+
+                    ByteOrder destByteOrder;
+
+                    if(System.getProperty("SMPP_MT_LITTLE_ENDIANNESS", "1") == "1") {
+                      destByteOrder = ByteOrder.LITTLE_ENDIAN;
+                    } else {
+                      destByteOrder = ByteOrder.BIG_ENDIAN;
+                    }
+
+                    ByteBuffer sourceByteBuffer = ByteBuffer.wrap(textBytes);
+                    ByteBuffer destByteBuffer = ByteBuffer.allocate(textBytes.length);
+
+                    destByteBuffer.order(destByteOrder);
+                    while(sourceByteBuffer.hasRemaining()) {
+                      destByteBuffer.putShort(sourceByteBuffer.getShort());
+                    }
+
+                    textBytes = destByteBuffer.array();
+                  }
 
                   SubmitSm submit = new SubmitSm();
                   int sourceTon = Integer.parseInt(System.getProperty("SMPP_SOURCE_TON", "3"));
@@ -139,6 +175,7 @@ public class Main {
                   submit.setDestAddress(new Address((byte) destTon, (byte) destNpi, destAddress));
                   submit.setRegisteredDelivery(SmppConstants.REGISTERED_DELIVERY_SMSC_RECEIPT_REQUESTED);
                   submit.setServiceType(System.getProperty("SMPP_SERVICE_TYPE", "vma"));
+                  submit.setDataCoding(dataCoding);
                   submit.setShortMessage(textBytes);
                   final SubmitSmResp submit1 = session.submit(submit, 10000);
                   Assert.assertNotNull(submit1);
