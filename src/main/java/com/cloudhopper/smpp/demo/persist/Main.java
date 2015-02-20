@@ -85,13 +85,13 @@ public class Main {
 
     final String[] smppServerNames = smppServersString.split(";");
 
-    Map<String,LoadBalancedList<OutboundClient>> smppServerBalancedLists = new HashMap<String,LoadBalancedList<OutboundClient>>(smppServerNames.length);
+    final Map<String,LoadBalancedList<OutboundClient>> smppServerBalancedLists = new HashMap<String,LoadBalancedList<OutboundClient>>(smppServerNames.length);
 
     int totalNumOfThreads = 0;
 
     for (int smppServerCounter = 0; smppServerCounter < smppServerNames.length; smppServerCounter++) {
       String smppServerKey = smppServerNames[smppServerCounter].toUpperCase();
-      int numOfThreads = Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_THREAD_SIZE", "1"));
+      int numOfThreads = Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_MT_THREAD_SIZE", "1"));
 
       final LoadBalancedList<OutboundClient> balancedList = LoadBalancedLists.synchronizedList(new RoundRobinLoadBalancedList<OutboundClient>());
 
@@ -102,40 +102,27 @@ public class Main {
       smppServerBalancedLists.put(smppServerKey, balancedList);
     }
 
-    int i = 0;
-
-    // Setup 1 Client per Telco here
-    final LoadBalancedList<OutboundClient> balancedList = LoadBalancedLists.synchronizedList(new RoundRobinLoadBalancedList<OutboundClient>());
-    balancedList.set(createClient(smppClientMessageService, i++, "FOO"), 1);
-    balancedList.set(createClient(smppClientMessageService, i++, "FOO"), 1);
-    balancedList.set(createClient(smppClientMessageService, i++, "FOO"), 1);
-
     final ExecutorService executorService = Executors.newFixedThreadPool(totalNumOfThreads);
 
     BlockingQueue mtMessageQueue = startWorkerQueue();
 
     while (true) {
-      String s = (String) mtMessageQueue.take();
-      final long messagesToSend;
-      try {
-        messagesToSend = Long.parseLong(s);
-      } catch (NumberFormatException e) {
-        break;
-      }
+      // this blocks until there's a job in the queue
+      final MtMessageJob job = (MtMessageJob) mtMessageQueue.take();
+      final String preferredSmppServerName = job.getPreferredSmppServerName();
+      final long messagesToSend = 1;
       final AtomicLong alreadySent = new AtomicLong();
-      for (int j = 0; j < 10; j++) {
+      for (int j = 0; j < totalNumOfThreads; j++) {
         executorService.execute(new Runnable() {
           @Override
           public void run() {
             try {
               long sent = alreadySent.incrementAndGet();
               while (sent <= messagesToSend) {
-                final OutboundClient next = balancedList.getNext();
+                final OutboundClient next = smppServerBalancedLists.get(preferredSmppServerName).getNext();
                 final SmppSession session = next.getSession();
                 if (session != null && session.isBound()) {
-                  String defaultText = "\u20AC Lorem [ipsum] dolor sit amet, consectetur adipiscing elit. Proin feugiat, leo id commodo tincidunt, nibh diam ornare est, vitae accumsan risus lacus sed sem metus.";
-
-                  String text160 = System.getProperty("SMPP_TEST_MT_MESSAGE_TEXT", defaultText);
+                  final String text160 = job.getMessageBody();
 
                   byte[] textBytes;
                   byte dataCoding;
@@ -149,7 +136,11 @@ public class Main {
 
                     ByteOrder destByteOrder;
 
-                    if(Integer.parseInt(System.getProperty("SMPP_MT_UCS2_LITTLE_ENDIANNESS", "1")) == 1) {
+                    int convertToLittleEndian = Integer.parseInt(
+                      System.getProperty(preferredSmppServerName + "_SMPP_MT_UCS2_LITTLE_ENDIANNESS", "1")
+                    );
+
+                    if(convertToLittleEndian == 1) {
                       destByteOrder = ByteOrder.LITTLE_ENDIAN;
                     } else {
                       destByteOrder = ByteOrder.BIG_ENDIAN;
@@ -167,16 +158,27 @@ public class Main {
                   }
 
                   SubmitSm submit = new SubmitSm();
-                  int sourceTon = Integer.parseInt(System.getProperty("SMPP_SOURCE_TON", "3"));
-                  int sourceNpi = Integer.parseInt(System.getProperty("SMPP_SOURCE_NPI", "0"));
-                  String sourceAddress = System.getProperty("SMPP_SOURCE_ADDRESS", "40404");
+                  int sourceTon = Integer.parseInt(
+                    System.getProperty(preferredSmppServerName + "_SMPP_SOURCE_TON", "3")
+                  );
+                  int sourceNpi = Integer.parseInt(
+                    System.getProperty(preferredSmppServerName + "_SMPP_SOURCE_NPI", "0")
+                  );
+
+                  final String sourceAddress = job.getSourceAddress();
                   submit.setSourceAddress(new Address((byte) sourceTon, (byte) sourceNpi, sourceAddress));
-                  int destTon = Integer.parseInt(System.getProperty("SMPP_DESTINATION_TON", "1"));
-                  int destNpi = Integer.parseInt(System.getProperty("SMPP_DESTINATION_NPI", "1"));
-                  String destAddress = System.getProperty("SMPP_TEST_MT_NUMBER", "44555519205");
+                  int destTon = Integer.parseInt(
+                    System.getProperty(preferredSmppServerName + "_SMPP_DESTINATION_TON", "1")
+                  );
+                  int destNpi = Integer.parseInt(
+                    System.getProperty(preferredSmppServerName + "_SMPP_DESTINATION_NPI", "1")
+                  );
+                  final String destAddress = job.getDestAddress();
                   submit.setDestAddress(new Address((byte) destTon, (byte) destNpi, destAddress));
                   submit.setRegisteredDelivery(SmppConstants.REGISTERED_DELIVERY_SMSC_RECEIPT_REQUESTED);
-                  submit.setServiceType(System.getProperty("SMPP_SERVICE_TYPE", "vma"));
+                  submit.setServiceType(
+                    System.getProperty(preferredSmppServerName + "_SMPP_SERVICE_TYPE", "vma")
+                  );
                   submit.setDataCoding(dataCoding);
                   submit.setShortMessage(textBytes);
                   final SubmitSmResp submit1 = session.submit(submit, 10000);
@@ -191,12 +193,6 @@ public class Main {
           }
         });
       }
-    }
-
-    executorService.shutdownNow();
-    ReconnectionDaemon.getInstance().shutdown();
-    for (LoadBalancedList.Node<OutboundClient> node : balancedList.getValues()) {
-      node.getValue().shutdown();
     }
   }
 
