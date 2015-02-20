@@ -9,9 +9,9 @@ package com.cloudhopper.smpp.demo.persist;
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *      http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -36,6 +36,10 @@ import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.Arrays;
+
 import java.io.FileInputStream;
 import java.util.Properties;
 
@@ -50,6 +54,22 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.ParseException;
+
+import static net.greghaines.jesque.utils.JesqueUtils.entry;
+import static net.greghaines.jesque.utils.JesqueUtils.map;
+
+import net.greghaines.jesque.Config;
+import net.greghaines.jesque.ConfigBuilder;
+import net.greghaines.jesque.worker.Worker;
+import net.greghaines.jesque.worker.WorkerImpl;
+import net.greghaines.jesque.worker.WorkerEvent;
+import net.greghaines.jesque.worker.WorkerListener;
+import net.greghaines.jesque.worker.MapBasedJobFactory;
+import net.greghaines.jesque.client.Client;
+import net.greghaines.jesque.client.ClientImpl;
+import net.greghaines.jesque.Job;
+
+//import net.greghaines.jesque.TestJob;
 
 public class Main {
   public static void main(String[] args) throws IOException, RecoverablePduException, InterruptedException,
@@ -104,6 +124,8 @@ public class Main {
 
     DummySmppClientMessageService smppClientMessageService = new DummySmppClientMessageService();
     int i = 0;
+
+    // Setup 1 Client per Telco here
     final LoadBalancedList<OutboundClient> balancedList = LoadBalancedLists.synchronizedList(new RoundRobinLoadBalancedList<OutboundClient>());
     balancedList.set(createClient(smppClientMessageService, ++i), 1);
     balancedList.set(createClient(smppClientMessageService, ++i), 1);
@@ -111,9 +133,36 @@ public class Main {
 
     final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
+    final BlockingQueue mtMessageQueue = new LinkedBlockingQueue<String>();
+
+    // Jesque
+
+    // Configuration
+    final Config config = new ConfigBuilder().build();
+
+    // how can I send the BlockingQueue to the Producer in the constructor here?
+    final Worker worker = new WorkerImpl(config,
+       Arrays.asList("default"), new MapBasedJobFactory(map(entry(TestJob.class.getSimpleName(), TestJob.class))));
+    worker.getWorkerEventEmitter().addListener(new WorkerListener(){
+       public void onEvent(WorkerEvent event, Worker worker, String queue, Job job, Object runner, Object result, Throwable t) {
+        if (runner instanceof TestJob) {
+            ((TestJob) runner).setQueue(mtMessageQueue);
+        }
+      }
+    }, WorkerEvent.JOB_EXECUTE);
+
+
+    final Thread workerThread = new Thread(worker);
+    workerThread.start();
+
     Scanner terminalInput = new Scanner(System.in);
     while (true) {
-      String s = terminalInput.nextLine();
+      // Here you want to block and wait for a MT
+//      String s = terminalInput.nextLine();
+      System.out.println("--------------------HERE 3------------------------------");
+      String s = (String) mtMessageQueue.take();
+      System.out.println("--------------------HERE------------------------------");
+      System.out.println(s);
       final long messagesToSend;
       try {
         messagesToSend = Long.parseLong(s);
