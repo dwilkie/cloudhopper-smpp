@@ -40,7 +40,7 @@ public class TestJob implements Runnable {
       this.arg1 = a;
     }
 
-    public void setQueue(BlockingQueue q) { queue = q; }
+    public void setQueue(final BlockingQueue q) { queue = q; }
 
     public void run() {
       try { queue.put(arg1); }

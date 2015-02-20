@@ -9,9 +9,9 @@ package com.cloudhopper.smpp.demo.persist;
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -32,7 +32,6 @@ import com.cloudhopper.smpp.type.*;
 import org.junit.Assert;
 
 import java.io.IOException;
-import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -75,52 +74,8 @@ public class Main {
   public static void main(String[] args) throws IOException, RecoverablePduException, InterruptedException,
       SmppChannelException, UnrecoverablePduException, SmppTimeoutException {
 
-    // create the command line parser
-    CommandLineParser parser = new BasicParser();
-
-    // create Options object
-    Options options = new Options();
-
-    Option configOption = OptionBuilder.withLongOpt("config")
-                                .withDescription("smpp configuration file")
-                                .hasArg()
-                                .withArgName("FILE")
-                                .isRequired()
-                                .create('c');
-
-    options.addOption(configOption);
-
-    String header = "Starts the client with the given configuration file\n\n";
-    String footer = "";
-
-    HelpFormatter formatter = new HelpFormatter();
-
-    String smppConfigurationFile = "";
-
-    try {
-      CommandLine line = parser.parse(options, args);
-      smppConfigurationFile = line.getOptionValue("c");
-    }
-
-    catch(ParseException exp) {
-      formatter.printHelp("chibi-smpp-client", header, options, footer, true);
-      System.exit(1);
-    }
-
-    // set up new properties object
-    // from the config file
-    try {
-      FileInputStream propFile = new FileInputStream(smppConfigurationFile);
-      Properties p = new Properties(System.getProperties());
-      p.load(propFile);
-
-      // set the system properties
-      System.setProperties(p);
-
-    } catch (IOException e) {
-      System.err.println(e.toString());
-      System.exit(1);
-    }
+    String smppConfigurationFile = getConfigFile(args);
+    loadSystemProperties(smppConfigurationFile);
 
     DummySmppClientMessageService smppClientMessageService = new DummySmppClientMessageService();
     int i = 0;
@@ -133,36 +88,10 @@ public class Main {
 
     final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
-    final BlockingQueue mtMessageQueue = new LinkedBlockingQueue<String>();
+    BlockingQueue mtMessageQueue = startWorkerQueue();
 
-    // Jesque
-
-    // Configuration
-    final Config config = new ConfigBuilder().build();
-
-    // how can I send the BlockingQueue to the Producer in the constructor here?
-    final Worker worker = new WorkerImpl(config,
-       Arrays.asList("default"), new MapBasedJobFactory(map(entry(TestJob.class.getSimpleName(), TestJob.class))));
-    worker.getWorkerEventEmitter().addListener(new WorkerListener(){
-       public void onEvent(WorkerEvent event, Worker worker, String queue, Job job, Object runner, Object result, Throwable t) {
-        if (runner instanceof TestJob) {
-            ((TestJob) runner).setQueue(mtMessageQueue);
-        }
-      }
-    }, WorkerEvent.JOB_EXECUTE);
-
-
-    final Thread workerThread = new Thread(worker);
-    workerThread.start();
-
-    Scanner terminalInput = new Scanner(System.in);
     while (true) {
-      // Here you want to block and wait for a MT
-//      String s = terminalInput.nextLine();
-      System.out.println("--------------------HERE 3------------------------------");
       String s = (String) mtMessageQueue.take();
-      System.out.println("--------------------HERE------------------------------");
-      System.out.println(s);
       final long messagesToSend;
       try {
         messagesToSend = Long.parseLong(s);
@@ -245,6 +174,80 @@ public class Main {
     for (LoadBalancedList.Node<OutboundClient> node : balancedList.getValues()) {
       node.getValue().shutdown();
     }
+  }
+
+  private static final BlockingQueue startWorkerQueue() {
+    final BlockingQueue blockingQueue = new LinkedBlockingQueue<String>();
+
+    // Jesque Configuration
+    final Config config = new ConfigBuilder().build();
+
+    final Worker worker = new WorkerImpl(config,
+       Arrays.asList("default"), new MapBasedJobFactory(map(entry(TestJob.class.getSimpleName(), TestJob.class))));
+    worker.getWorkerEventEmitter().addListener(new WorkerListener(){
+       public void onEvent(WorkerEvent event, Worker worker, String queue, Job job, Object runner, Object result, Throwable t) {
+        if (runner instanceof TestJob) {
+            ((TestJob) runner).setQueue(blockingQueue);
+        }
+      }
+    }, WorkerEvent.JOB_EXECUTE);
+
+    final Thread workerThread = new Thread(worker);
+    workerThread.start();
+    return blockingQueue;
+  }
+
+  private static void loadSystemProperties(String configurationFile) {
+    // set up new properties object
+    // from the config file
+    try {
+      FileInputStream propFile = new FileInputStream(configurationFile);
+      Properties p = new Properties(System.getProperties());
+      p.load(propFile);
+
+      // set the system properties
+      System.setProperties(p);
+
+    } catch (IOException e) {
+      System.err.println(e.toString());
+      System.exit(1);
+    }
+  }
+
+  private static String getConfigFile(String [] args) {
+    // create the command line parser
+    CommandLineParser parser = new BasicParser();
+
+    // create Options object
+    Options options = new Options();
+
+    Option configOption = OptionBuilder.withLongOpt("config")
+                                .withDescription("smpp configuration file")
+                                .hasArg()
+                                .withArgName("FILE")
+                                .isRequired()
+                                .create('c');
+
+    options.addOption(configOption);
+
+    String header = "Starts the client with the given configuration file\n\n";
+    String footer = "";
+
+    HelpFormatter formatter = new HelpFormatter();
+
+    String smppConfigurationFile = "";
+
+    try {
+      CommandLine line = parser.parse(options, args);
+      smppConfigurationFile = line.getOptionValue("c");
+    }
+
+    catch(ParseException exp) {
+      formatter.printHelp("chibi-smpp-client", header, options, footer, true);
+      System.exit(1);
+    }
+
+    return smppConfigurationFile;
   }
 
   private static OutboundClient createClient(DummySmppClientMessageService smppClientMessageService, int i) {
