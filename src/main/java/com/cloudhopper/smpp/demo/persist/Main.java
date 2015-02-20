@@ -9,9 +9,9 @@ package com.cloudhopper.smpp.demo.persist;
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *      http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -38,6 +38,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.HashMap;
 
 import java.io.FileInputStream;
 import java.util.Properties;
@@ -78,15 +80,37 @@ public class Main {
     loadSystemProperties(smppConfigurationFile);
 
     DummySmppClientMessageService smppClientMessageService = new DummySmppClientMessageService();
+
+    final String smppServersString = System.getProperty("SMPP_SERVERS", "default");
+
+    final String[] smppServerNames = smppServersString.split(";");
+
+    Map<String,LoadBalancedList<OutboundClient>> smppServerBalancedLists = new HashMap<String,LoadBalancedList<OutboundClient>>(smppServerNames.length);
+
+    int totalNumOfThreads = 0;
+
+    for (int smppServerCounter = 0; smppServerCounter < smppServerNames.length; smppServerCounter++) {
+      String smppServerKey = smppServerNames[smppServerCounter].toUpperCase();
+      int numOfThreads = Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_THREAD_SIZE", "1"));
+
+      final LoadBalancedList<OutboundClient> balancedList = LoadBalancedLists.synchronizedList(new RoundRobinLoadBalancedList<OutboundClient>());
+
+      for (int threadCounter = 0; threadCounter < numOfThreads; threadCounter++) {
+        balancedList.set(createClient(smppClientMessageService, threadCounter, smppServerKey), 1);
+        totalNumOfThreads++;
+      }
+      smppServerBalancedLists.put(smppServerKey, balancedList);
+    }
+
     int i = 0;
 
     // Setup 1 Client per Telco here
     final LoadBalancedList<OutboundClient> balancedList = LoadBalancedLists.synchronizedList(new RoundRobinLoadBalancedList<OutboundClient>());
-    balancedList.set(createClient(smppClientMessageService, ++i), 1);
-    balancedList.set(createClient(smppClientMessageService, ++i), 1);
-    balancedList.set(createClient(smppClientMessageService, ++i), 1);
+    balancedList.set(createClient(smppClientMessageService, i++, "FOO"), 1);
+    balancedList.set(createClient(smppClientMessageService, i++, "FOO"), 1);
+    balancedList.set(createClient(smppClientMessageService, i++, "FOO"), 1);
 
-    final ExecutorService executorService = Executors.newFixedThreadPool(10);
+    final ExecutorService executorService = Executors.newFixedThreadPool(totalNumOfThreads);
 
     BlockingQueue mtMessageQueue = startWorkerQueue();
 
@@ -250,28 +274,28 @@ public class Main {
     return smppConfigurationFile;
   }
 
-  private static OutboundClient createClient(DummySmppClientMessageService smppClientMessageService, int i) {
+  private static OutboundClient createClient(DummySmppClientMessageService smppClientMessageService, int i, final String smppServerKey) {
     OutboundClient client = new OutboundClient();
-    client.initialize(getSmppSessionConfiguration(i), smppClientMessageService);
+    client.initialize(getSmppSessionConfiguration(i, smppServerKey), smppClientMessageService);
     client.scheduleReconnect();
     return client;
   }
 
-  private static SmppSessionConfiguration getSmppSessionConfiguration(int i) {
+  private static SmppSessionConfiguration getSmppSessionConfiguration(int i, final String smppServerKey) {
     SmppSessionConfiguration config = new SmppSessionConfiguration();
-    config.setWindowSize(Integer.parseInt(System.getProperty("SMPP_WINDOW_SIZE", "5")));
-    config.setName("Tester.Session." + i);
+    config.setWindowSize(Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_WINDOW_SIZE", "5")));
+    config.setName(smppServerKey + ".Session." + i);
     config.setType(SmppBindType.TRANSCEIVER);
-    config.setHost(System.getProperty("SMPP_HOST", "127.0.0.1"));
-    config.setPort(Integer.parseInt(System.getProperty("SMPP_PORT", "2776")));
-    config.setConnectTimeout(Integer.parseInt(System.getProperty("SMPP_CONNECTION_TIMEOUT", "10000")));
-    config.setSystemId(System.getProperty("SMPP_SYSTEM_ID", "systemId" + i));
-    config.setPassword(System.getProperty("SMPP_PASSWORD", "password"));
+    config.setHost(System.getProperty(smppServerKey + "_SMPP_HOST", "127.0.0.1"));
+    config.setPort(Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_PORT", "2776")));
+    config.setConnectTimeout(Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_CONNECTION_TIMEOUT", "10000")));
+    config.setSystemId(System.getProperty(smppServerKey + "_SMPP_SYSTEM_ID", "systemId" + i));
+    config.setPassword(System.getProperty(smppServerKey + "_SMPP_PASSWORD", "password"));
     config.getLoggingOptions().setLogBytes(false);
     // to enable monitoring (request expiration)
 
-    config.setRequestExpiryTimeout(Integer.parseInt(System.getProperty("SMPP_REQUEST_EXPIRY_TIMEOUT", "30000")));
-    config.setWindowMonitorInterval(Integer.parseInt(System.getProperty("SMPP_WINDOW_MONITOR_INTERVAL", "15000")));
+    config.setRequestExpiryTimeout(Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_REQUEST_EXPIRY_TIMEOUT", "30000")));
+    config.setWindowMonitorInterval(Integer.parseInt(System.getProperty(smppServerKey + "_SMPP_WINDOW_MONITOR_INTERVAL", "15000")));
 
     config.setCountersEnabled(false);
 
